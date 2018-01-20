@@ -1,4 +1,5 @@
-﻿using ChakraHost.Hosting;
+﻿using ChakraCoreHost.Hosting;
+using ChakraHost.Hosting;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -9,46 +10,96 @@ namespace ChakraCoreHost
 {
 	public class JavascriptEngine : IDisposable
 	{
-		JavaScriptRuntime runtime;
 		string script;
 		const string scriptPath = "script.js";
+		public JavaScriptRuntime runtime;
+		/// <summary>
+		/// Script dispatcher
+		/// </summary>
+		private readonly ScriptDispatcher _dispatcher = new ScriptDispatcher();
 		public JavascriptEngine(string scriptPath)
 		{
-			runtime = JavaScriptRuntime.Create();
 			script = File.ReadAllText(scriptPath);
+			runtime = JavaScriptRuntime.Create();
+		}/// <summary>
+		 /// Adds a reference to the value
+		 /// </summary>
+		 /// <param name="value">The value</param>
+		private static void AddReferenceToValue(JavaScriptValue value)
+		{
+			if (CanHaveReferences(value))
+			{
+				value.AddRef();
+			}
+		}
+		private static bool CanHaveReferences(JavaScriptValue value)
+		{
+			JavaScriptValueType valueType = value.ValueType;
+
+			switch (valueType)
+			{
+				case JavaScriptValueType.Null:
+				case JavaScriptValueType.Undefined:
+				case JavaScriptValueType.Boolean:
+					return false;
+				default:
+					return true;
+			}
+		}
+		/// <summary>
+		/// Removes a reference to the value
+		/// </summary>
+		/// <param name="value">The value</param>
+		private static void RemoveReferenceToValue(JavaScriptValue value)
+		{
+			if (CanHaveReferences(value))
+			{
+				value.Release();
+			}
 		}
 		public T CallFunction<T>(string functionName, Tuple<object, Type>[] parameters)
 		{
-			var context = CreateHostContext(runtime, new string[0], 0); //arguments, commandLineArguments.ArgumentsStart);
-			using (new JavaScriptContext.Scope(context))
+			return _dispatcher.Invoke(() =>
 			{
-				JavaScriptContext.RunScript(script, currentSourceContext++, scriptPath);
-				JavaScriptValue strResult;
-				try
+				var context = CreateHostContext(runtime, new string[0], 0); //arguments, commandLineArguments.ArgumentsStart);
+				using (new JavaScriptContext.Scope(context))
 				{
-					var jsonObject = JavaScriptValue.GlobalObject.GetProperty(JavaScriptPropertyId.FromString("JSON"));
-					var stringify = jsonObject.GetProperty(JavaScriptPropertyId.FromString("stringify"));
-					var parse = jsonObject.GetProperty(JavaScriptPropertyId.FromString("parse"));
+					JavaScriptContext.RunScript(script, currentSourceContext++, scriptPath);
+					JavaScriptValue strResult;
+					try
+					{
+						var jsonObject = JavaScriptValue.GlobalObject.GetProperty(JavaScriptPropertyId.FromString("JSON"));
+						var stringify = jsonObject.GetProperty(JavaScriptPropertyId.FromString("stringify"));
+						var parse = jsonObject.GetProperty(JavaScriptPropertyId.FromString("parse"));
 
-					var zxcvbn = JavaScriptValue.GlobalObject.GetProperty(JavaScriptPropertyId.FromString(functionName));
-					var javascriptParameters = CreateParameters(parameters);
+						var zxcvbn = JavaScriptValue.GlobalObject.GetProperty(JavaScriptPropertyId.FromString(functionName));
+						var javascriptParameters = CreateParameters(parameters);
+						foreach (JavaScriptValue processedArg in javascriptParameters)
+						{
+							AddReferenceToValue(processedArg);
+						}
+						var result = zxcvbn.CallFunction(javascriptParameters.ToArray());
+						foreach (JavaScriptValue processedArg in javascriptParameters)
+						{
+							RemoveReferenceToValue(processedArg);
+						}
+						strResult = stringify.CallFunction(JavaScriptValue.GlobalObject, result);
+						return JsonConvert.DeserializeObject<T>(strResult.ConvertToString().ToString());
 
-					var result = zxcvbn.CallFunction(javascriptParameters.ToArray());
-					strResult = stringify.CallFunction(JavaScriptValue.GlobalObject, result);
-					return JsonConvert.DeserializeObject<T>(strResult.ConvertToString().ToString());
-
+					}
+					catch (JavaScriptScriptException e)
+					{
+						//log
+						throw;
+					}
+					catch (Exception e)
+					{
+						//log
+						throw;
+					}
 				}
-				catch (JavaScriptScriptException e)
-				{
-					//log
-					throw;
-				}
-				catch (Exception e)
-				{
-					//log
-					throw;
-				}
-			}
+			});
+			
 
 		}
 
@@ -278,5 +329,7 @@ namespace ChakraCoreHost
 			}
 			this.disposed = true;
 		}
+
 	}
+
 }

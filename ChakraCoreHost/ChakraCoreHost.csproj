@@ -116,6 +116,7 @@
     <Compile Include="Hosting\JavaScriptValue.cs" />
     <Compile Include="Hosting\JavaScriptValueType.cs" />
     <Compile Include="Hosting\Native.cs" />
+    <Compile Include="Hosting\ScriptDispatcher.cs" />
     <Compile Include="JavascriptEngine.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Zxcvbn.cs" />
